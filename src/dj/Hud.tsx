@@ -3,7 +3,8 @@
 //     small camera button then sits in the corner to bring it back. Over it,
 //     thin guides for the mixer hand and a tag naming what your hands just
 //     did (CameraGuides.tsx)
-//   - one floating dock, bottom centre, icons only: the style (a card of four
+//   - one floating dock, bottom centre, icons only: the routines (a card to
+//     learn and play them; stop while one runs, RoutineUI.tsx), the style (a card of four
 //     beats), play / stop, the effects (a card of the four pads and the
 //     drop), the view (front, player, close), day / night, and how to play.
 //     A small label shows over a button on hover, or for a moment after a tap.
@@ -30,6 +31,8 @@ import {
   type View,
 } from "./layout";
 import { CameraGuides } from "./CameraGuides";
+import { stopRoutine } from "./RoutinePlayer";
+import { NoteIcon, ROUTINE_CSS, RoutineUI, StopRoutineIcon } from "./RoutineUI";
 import { STYLE, STYLES, type StyleId } from "./music";
 import {
   closeHowTo,
@@ -250,6 +253,14 @@ const PicPads = () => (
     <rect x="13" y="13" width="8" height="7" rx="1.6" opacity=".6" />
   </Pic>
 );
+/** A music note: the routines. */
+const PicNote = () => (
+  <Pic>
+    <path d="M9 18V5l11-2v13" />
+    <circle cx="6.5" cy="18" r="2.5" />
+    <circle cx="17.5" cy="16" r="2.5" />
+  </Pic>
+);
 /** Play and stop. */
 const PicPlay = () => (
   <Pic>
@@ -309,6 +320,11 @@ const HAND_STEPS: Step[] = [
     tint: COLOURS.magenta,
   },
   {
+    key: "routines",
+    pic: <PicNote />,
+    text: "♪ Routines: learn a set cue by cue, then play it on the beat for stars",
+  },
+  {
     key: "mouse",
     pic: <PicScratch />,
     text: (
@@ -363,6 +379,11 @@ const STEPS: Step[] = [
       </>
     ),
     tint: COLOURS.pads[1],
+  },
+  {
+    key: "routines",
+    pic: <PicNote />,
+    text: "♪ Routines: learn a set cue by cue, then play it on the beat for stars",
   },
   {
     key: "play",
@@ -475,6 +496,25 @@ export const Hud = () => {
   const noCamera = dj.entered && !camera;
 
   const buttons: DockButton[] = [
+    dj.session
+      ? {
+          id: "routines",
+          label: "Stop routine",
+          icon: <StopRoutineIcon />,
+          on: true,
+          act: stopRoutine,
+        }
+      : {
+          id: "routines",
+          label: "Routines",
+          icon: <NoteIcon />,
+          on: dj.card === "routines",
+          act: () => {
+            dj.finish = null;
+            closeHowTo();
+            setCard("routines");
+          },
+        },
     {
       id: "style",
       label: `Style: ${STYLE[dj.style].label}`,
@@ -534,6 +574,7 @@ export const Hud = () => {
       style={{ pointerEvents: "none" }}
     >
       <style>{CSS}</style>
+      <style>{ROUTINE_CSS}</style>
       <div className="vl-root">
         {noCamera ? (
           <div
@@ -676,6 +717,10 @@ export const Hud = () => {
               </span>
             </button>
           </div>
+        ) : null}
+
+        {dj.entered ? (
+          <RoutineUI width={width} height={height} camera={camera} />
         ) : null}
 
         <div

@@ -42,16 +42,17 @@ export class DeckMotion {
   travel = 0;
 
   /**
-   * One step of `dt` seconds. `slip` is where the beat is (seconds since the
-   * loop started), or null when the decks are stopped.
+   * One step of `dt` seconds. `slip` is where the beat is (seconds of music
+   * since the loop started), or null when the decks are stopped; `speed`
+   * the turntables' speed (× normal).
    */
-  step(dt: number, slip: number | null) {
+  step(dt: number, slip: number | null, speed = 1) {
     if (this.mode === "play" && slip !== null) {
       const moved = slip - this.pos;
       this.pos = slip;
-      this.rate = 1;
+      this.rate = speed;
       // A jump back to the beat (after a scratch) doesn't spin the record.
-      this.travel += Math.abs(moved) < 0.25 ? moved : dt;
+      this.travel += Math.abs(moved) < 0.25 ? moved : dt * speed;
       return;
     }
     const before = this.pos;

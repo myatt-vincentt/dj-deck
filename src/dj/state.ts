@@ -12,6 +12,7 @@ import { useSyncExternalStore } from "react";
 import { sound } from "./audio";
 import { angleToMusic, DeckMotion } from "./deck";
 import { VIEWS, type View } from "./layout";
+import type { Session, SessionMode } from "./session";
 import {
   barLength,
   beatLength,
@@ -23,7 +24,7 @@ import {
   type StyleId,
 } from "./music";
 
-export type Card = "style" | "fx" | null;
+export type Card = "style" | "fx" | "routines" | null;
 export type Side = "left" | "right";
 
 /** Which of your hands does what: the deck hand scratches, the mixer hand mixes. */
@@ -39,6 +40,22 @@ export const PAD_LABEL: Record<PadId, string> = {
   2: "Echo",
   3: "Riser",
   4: "Vocal chop",
+};
+
+/** What you do that a routine listens for (zones are read from the state). */
+export type ActionKind =
+  | "scratch"
+  | "brake"
+  | "fill"
+  | "echo"
+  | "riser"
+  | "chop"
+  | "drop";
+const PAD_ACTION: Record<PadId, ActionKind> = {
+  1: "fill",
+  2: "echo",
+  3: "riser",
+  4: "chop",
 };
 
 const listeners = new Set<() => void>();
@@ -63,8 +80,10 @@ export const dj = {
     bpm: STYLE.house.bpm,
     /** The style sounding now (`dj.style` is the one chosen). */
     style: "house" as StyleId,
-    /** A style waiting for the next bar. */
-    next: null as { style: StyleId; at: number } | null,
+    /** The turntables' speed (× the style's tempo; `bpm` includes it). */
+    speed: 1,
+    /** A style (and speed) waiting for the next bar. */
+    next: null as { style: StyleId; at: number; speed: number } | null,
     /** The times are the audio clock's (the sound runs). */
     audio: false,
   },
@@ -89,6 +108,8 @@ export const dj = {
     pressed: { 1: -1e9, 2: -1e9, 3: -1e9, 4: -1e9 } as Record<PadId, number>,
     drop: { from: -1e9, land: -1e9 },
   },
+  /** What you did, not yet read by a routine (`at`: the transport's clock). */
+  actions: [] as { kind: ActionKind; at: number }[],
   /** performance.now() / 1000 while music plays (the ON AIR sign). */
   playedAt: -1e9,
 
@@ -103,6 +124,21 @@ export const dj = {
   howToUntil: null as number | null,
   dockPulseAt: null as number | null,
   card: null as Card,
+
+  // Routines.
+  /** The routine being learnt or played (null: free play). */
+  session: null as Session | null,
+  /** Play runs slower (0.85×). */
+  slow: false,
+  /** A routine just finished: its stars (performance.now() ms). */
+  finish: null as {
+    id: string;
+    mode: SessionMode;
+    stars: number;
+    at: number;
+  } | null,
+  /** The latest cue that counted (seq to replay its sparkle). */
+  cueFx: { seq: 0, perfect: false, miss: 0 },
   changed() {
     version += 1;
     listeners.forEach((l) => l());
@@ -132,6 +168,14 @@ const now = () =>
 /** Now as heard (the speakers lag the clock a little), for the scene. */
 const heard = () =>
   dj.transport.audio ? (sound.now(true) ?? pageClock()) : pageClock();
+
+/** The transport's clock now (for a routine's timing). */
+export const clockNow = () => now();
+
+const act = (kind: ActionKind) => {
+  dj.actions.push({ kind, at: now() });
+  if (dj.actions.length > 32) dj.actions.shift();
+};
 
 /** The next beat (or bar) line at least `lead` seconds from now. */
 export const nextLine = (t: number, every: number, lead = 0.03) => {
@@ -212,21 +256,49 @@ export const setFilter = (v: number) => {
   sound.filter(dj.filter);
 };
 
-export const setStyle = (id: StyleId) => {
-  if (id === dj.style && !dj.transport.next) return;
+/** A style (at a speed) from the next bar on (at once when stopped). */
+export const setStyle = (id: StyleId, speed = 1) => {
   const t = dj.transport;
+  if (id === dj.style && speed === (t.next?.speed ?? t.speed)) return;
   if (dj.playing) {
     const at = nextLine(now(), barLength(t.bpm), 0.12);
-    t.next = { style: id, at };
-    sound.load(id, at);
+    t.next = { style: id, at, speed };
+    sound.load(id, at, speed);
   } else {
     t.next = null;
     t.style = id;
-    t.bpm = STYLE[id].bpm;
-    sound.load(id, now());
+    t.speed = speed;
+    t.bpm = STYLE[id].bpm * speed;
+    sound.load(id, now(), speed);
   }
   dj.style = id;
   dj.changed();
+};
+
+/**
+ * Starts a style's loops from their first bar, now (playing): a routine's
+ * start. Returns when its first bar starts (on the transport's clock).
+ */
+export const restart = (id: StyleId, speed = 1) => {
+  const t = dj.transport;
+  const at = now() + 0.12;
+  t.next = null;
+  t.style = id;
+  t.speed = speed;
+  t.bpm = STYLE[id].bpm * speed;
+  t.t0 = at;
+  dj.style = id;
+  sound.load(id, at, speed);
+  sound.start(at, speed);
+  if (!dj.playing) {
+    dj.playing = true;
+    DECKS.forEach((d) => {
+      const m = dj.decks[d];
+      if (m.mode === "stopped") m.mode = "play";
+    });
+  }
+  dj.changed();
+  return at;
 };
 export const nextStyle = () =>
   setStyle(STYLES[(STYLES.indexOf(dj.style) + 1) % STYLES.length]);
@@ -238,11 +310,12 @@ export const setPlaying = (on: boolean) => {
   if (on) {
     if (t.next) {
       t.style = t.next.style;
-      t.bpm = STYLE[t.style].bpm;
+      t.speed = t.next.speed;
+      t.bpm = STYLE[t.style].bpm * t.speed;
       t.next = null;
     }
     t.t0 = now() + 0.06;
-    sound.start(t.t0);
+    sound.start(t.t0, t.speed);
   } else sound.stop();
   DECKS.forEach((d) => {
     const m = dj.decks[d];
@@ -263,6 +336,7 @@ export const holdDeck = (d: DeckId) => {
   if (m.mode === "brake" || m.mode === "scratch") return;
   m.mode = "brake";
   sound.brake(d);
+  act("brake");
 };
 
 /**
@@ -270,6 +344,10 @@ export const holdDeck = (d: DeckId) => {
  * it follows the hand, and the sound scratches.
  */
 const grab = { A: 0, B: 0 } as Record<DeckId, number>;
+/** A scratch's stroke: where it turned last, and which way it goes. */
+const stroke = { turn: 0, dir: 0 };
+/** A new stroke counts once the record has moved this far the other way (radians). */
+const STROKE = 0.12;
 export const scratchDeck = (d: DeckId, radians: number) => {
   dj.handDeck = d;
   if (!dj.playing) return;
@@ -277,7 +355,18 @@ export const scratchDeck = (d: DeckId, radians: number) => {
   if (m.mode !== "scratch") {
     grab[d] = m.pos;
     m.mode = "scratch";
+    stroke.turn = radians;
+    stroke.dir = 0;
   }
+  // Each stroke (a push or a pull) is a scratch for a routine.
+  const moved = radians - stroke.turn;
+  if (stroke.dir === 0 || Math.sign(moved) !== stroke.dir) {
+    if (Math.abs(moved) > STROKE) {
+      stroke.dir = Math.sign(moved);
+      stroke.turn = radians;
+      act("scratch");
+    }
+  } else stroke.turn = radians;
   dj.scratchAngle[d] = radians;
   m.target = grab[d] + angleToMusic(radians);
   sound.scratch(d, m.target);
@@ -300,6 +389,7 @@ export const pad = (k: PadId) => {
   dj.fx.pressed[k] = perf;
   dj.changed();
   if (!dj.playing) return;
+  act(PAD_ACTION[k]);
   const t = now();
   const { bpm } = dj.transport;
   const beat = beatLength(bpm);
@@ -335,6 +425,7 @@ export const drop = () => {
   const from = nextLine(t, beat);
   const land = nextLine(from + 3 * beat, barLength(bpm), 0);
   sound.drop(from, land, bpm);
+  act("drop");
   dj.fx.drop = { from: perf + (from - t), land: perf + (land - t) };
   dj.changed();
 };
@@ -352,31 +443,32 @@ export const tick = (dt: number) => {
     t.audio = true;
     t.next = null;
     t.style = dj.style;
-    t.bpm = STYLE[dj.style].bpm;
+    t.bpm = STYLE[dj.style].bpm * t.speed;
     const at = (sound.now() ?? 0) + 0.12;
     t.t0 = at;
-    sound.load(dj.style, at);
+    sound.load(dj.style, at, t.speed);
     setCrossfade(dj.xfade);
     setFilter(dj.filter);
-    if (dj.playing) sound.start(at);
+    if (dj.playing) sound.start(at, t.speed);
     sound.prepareAll();
   }
   const h = heard();
   if (t.next && h >= t.next.at) {
     t.t0 = t.next.at;
     t.style = t.next.style;
-    t.bpm = STYLE[t.style].bpm;
+    t.speed = t.next.speed;
+    t.bpm = STYLE[t.style].bpm * t.speed;
     t.next = null;
   }
-  const slip = dj.playing ? h - t.t0 : null;
+  const slip = dj.playing ? (h - t.t0) * t.speed : null;
   const gains = crossfadeGains(dj.xfade);
   const sounding = t.style;
   let low = 0;
   let level = 0;
   DECKS.forEach((d) => {
     const m = dj.decks[d];
-    m.step(dt, slip);
-    const moving = Math.min(1, Math.abs(m.rate));
+    m.step(dt, slip, t.speed);
+    const moving = Math.min(1, Math.abs(m.rate) / t.speed);
     const env = deckEnvelope(sounding, d, m.pos);
     const lv = env.level * moving * gains[d];
     dj.levels[d] = lv;

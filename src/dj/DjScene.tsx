@@ -17,6 +17,8 @@
 //   PointerInput.tsx  dragging the records, sliders and pads, and the keys
 //   CameraFrame.tsx   your camera in the corner
 //   Hud.tsx           the bottom dock, its style and effects cards, how to play
+//   RoutinePlayer.tsx routines to learn and play (session.ts, routines.ts; the
+//                     cards in RoutineUI.tsx, the gold glow on the booth in CueGlow.tsx)
 //   Home.tsx          the home page (Start), shown over the scene while it loads
 //   state.ts          the beat, the decks, the mixer and the pads
 //   deck.ts           how a record moves (play, brake, scratch)
@@ -29,11 +31,13 @@ import { HandTracker } from "@vincentt-xr/sdk/tracking";
 import { Booth } from "./Booth";
 import { CameraFrame } from "./CameraFrame";
 import { CameraRig } from "./CameraRig";
+import { CueGlow } from "./CueGlow";
 import { Fx } from "./Fx";
 import { GhostHands } from "./GhostHands";
 import { Hands } from "./Hands";
 import { Hud } from "./Hud";
 import { PointerInput } from "./PointerInput";
+import { RoutinePlayer } from "./RoutinePlayer";
 import { dj, tick, useDjVersion } from "./state";
 import { Studio } from "./Studio";
 
@@ -65,6 +69,7 @@ export const DjScene = () => {
         <Studio />
         <Booth />
         <Fx />
+        <CueGlow />
         <GhostHands />
         <Loaded />
       </Suspense>
@@ -72,6 +77,7 @@ export const DjScene = () => {
       <Hands />
       <CameraFrame />
       <PointerInput />
+      <RoutinePlayer />
       <Hud />
     </>
   );

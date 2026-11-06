@@ -5,6 +5,7 @@
 //   __dj.pad(1) … __dj.pad(4), __dj.drop()
 //   __dj.hold("B"), __dj.scratch("B", 0.8), __dj.release("B")
 //   __dj.view("player"), __dj.night(true)
+//   __dj.routine("warm-up", "play"), __dj.cue()     a routine, and its cue now
 //   __dj.hands                                    what your hands do (the tracker's readings)
 //   __dj.look([x, y, z], [tx, ty, tz], fov)   a fixed camera (null: back)
 import { useEffect } from "react";
@@ -14,9 +15,11 @@ import { Vector3 } from "three";
 import { sound } from "./audio";
 import { cameraOverride } from "./CameraRig";
 import { hands } from "./Hands";
+import { startRoutine, stopRoutine } from "./RoutinePlayer";
 import type { View } from "./layout";
 import type { DeckId, StyleId } from "./music";
 import {
+  clockNow,
   dj,
   drop,
   holdDeck,
@@ -52,6 +55,24 @@ const DevDebug = () => {
       scratch: (d: DeckId, radians: number) => scratchDeck(d, radians),
       release: (d: DeckId = "B") => releaseDeck(d),
       view: (v: View) => setView(v),
+      routine: (id: string, mode: "learn" | "play" = "learn") =>
+        startRoutine(id, mode),
+      stopRoutine: () => stopRoutine(),
+      /** The routine's cue now: its kind and how long until it is due (s). */
+      cue() {
+        const s = dj.session;
+        if (!s) return null;
+        const now = clockNow();
+        const i = s.current(now);
+        const c = s.routine.cues[i];
+        return {
+          mode: s.mode,
+          i,
+          kind: c?.kind ?? null,
+          due: c ? s.timeOf(i) - now : null,
+          results: s.results,
+        };
+      },
       night: (on: boolean) => setNight(on),
       look(pos: number[] | null, target: number[] = [0, 1.1, -0.4], fov = 40) {
         cameraOverride.pose = pos

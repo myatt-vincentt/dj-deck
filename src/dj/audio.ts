@@ -51,13 +51,13 @@ class DeckPlayer extends AudioWorkletProcessor {
   constructor() {
     super();
     this.L = null; this.R = null; this.len = 0; this.next = null;
-    this.origin = null; this.startAt = null;
+    this.origin = null; this.startAt = null; this.speed = 1; this.startSpeed = 1;
     this.mode = "stopped"; this.pos = 0; this.rate = 0; this.target = 0;
     this.oldPos = 0; this.oldRate = 0; this.fade = 0;
     this.port.onmessage = (e) => {
       const m = e.data;
       if (m.type === "load") this.next = m;
-      else if (m.type === "start") this.startAt = m.at;
+      else if (m.type === "start") { this.startAt = m.at; this.startSpeed = m.speed; }
       else if (m.type === "stop") { this.origin = null; this.startAt = null; if (this.mode !== "stopped") this.mode = "stopped"; }
       else if (m.type === "brake") { if (this.origin !== null && this.mode !== "brake") { this.mode = "brake"; } }
       else if (m.type === "scratch") { if (this.origin !== null) { if (this.mode !== "scratch") this.target = this.pos / sampleRate; this.mode = "scratch"; this.target = m.target; } }
@@ -86,15 +86,16 @@ class DeckPlayer extends AudioWorkletProcessor {
       const t = currentTime + i / sr;
       if (this.next && t >= this.next.at) {
         this.L = this.next.left; this.R = this.next.right; this.len = this.L.length;
+        this.speed = this.next.speed;
         if (this.origin !== null) { this.origin = this.next.at; this.mode = "play"; this.fade = 0; }
         this.next = null;
       }
       if (this.startAt !== null && t >= this.startAt) {
-        this.origin = this.startAt; this.startAt = null; this.mode = "play"; this.fade = 0;
+        this.origin = this.startAt; this.speed = this.startSpeed; this.startAt = null; this.mode = "play"; this.fade = 0;
       }
       let amp = 1;
       if (this.mode === "play" && this.origin !== null) {
-        this.pos = (t - this.origin) * sr; this.rate = 1;
+        this.pos = (t - this.origin) * sr * this.speed; this.rate = this.speed;
       } else if (this.mode === "scratch") {
         let want = (this.target * sr - this.pos) / (FOLLOW * sr);
         want = Math.max(-MAX, Math.min(MAX, want));
@@ -416,8 +417,11 @@ export const sound = {
     return t - (c.outputLatency || 0) - (c.baseLatency || 0);
   },
 
-  /** Hands both decks the style's loops: they switch over at `at` (audio time). */
-  load(style: StyleId, at: number) {
+  /**
+   * Hands both decks the style's loops: they switch over at `at` (audio
+   * time), turning at `speed` (× the style's tempo; a turntable's pitch).
+   */
+  load(style: StyleId, at: number, speed = 1) {
     if (!graph) return;
     const rate = graph.ctx.sampleRate;
     DECKS.forEach((d) => {
@@ -427,6 +431,7 @@ export const sound = {
         left: l.left,
         right: l.right,
         at,
+        speed,
       });
     });
   },
@@ -445,9 +450,9 @@ export const sound = {
     window.setTimeout(next, 600);
   },
 
-  start(at: number) {
-    graph?.decks.A.port.postMessage({ type: "start", at });
-    graph?.decks.B.port.postMessage({ type: "start", at });
+  start(at: number, speed = 1) {
+    graph?.decks.A.port.postMessage({ type: "start", at, speed });
+    graph?.decks.B.port.postMessage({ type: "start", at, speed });
   },
 
   stop() {
