@@ -52,6 +52,12 @@ const onControl = (e: Event) => {
   );
 };
 
+/** What the mouse (or a finger) holds now: the hands leave it alone. */
+export const pointerBusy = {
+  record: null as DeckId | null,
+  mixer: false,
+};
+
 /** A turn this big (radians) starts a scratch; less is a hold (a brake). */
 const SCRATCH_START = 0.05;
 /** Dragging the filter this far (CSS px) turns it end to end. */
@@ -191,6 +197,8 @@ export const PointerInput = () => {
         return;
       }
       drag = d;
+      if (target.kind === "record") pointerBusy.record = target.deck;
+      else pointerBusy.mixer = true;
       canvas.style.cursor = "grabbing";
     };
 
@@ -233,6 +241,8 @@ export const PointerInput = () => {
       if (!drag || e.pointerId !== drag.id) return;
       if (drag.target.kind === "record") releaseDeck(drag.target.deck);
       drag = null;
+      pointerBusy.record = null;
+      pointerBusy.mixer = false;
       canvas.style.cursor = "";
     };
 
@@ -274,6 +284,8 @@ export const PointerInput = () => {
     const onBlur = () => {
       if (drag?.target.kind === "record") releaseDeck(drag.target.deck);
       drag = null;
+      pointerBusy.record = null;
+      pointerBusy.mixer = false;
     };
     window.addEventListener("pointerdown", onDown);
     window.addEventListener("pointermove", onMove);

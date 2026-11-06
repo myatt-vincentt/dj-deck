@@ -5,6 +5,7 @@
 //   __dj.pad(1) … __dj.pad(4), __dj.drop()
 //   __dj.hold("B"), __dj.scratch("B", 0.8), __dj.release("B")
 //   __dj.view("player"), __dj.night(true)
+//   __dj.hands                                    what your hands do (the tracker's readings)
 //   __dj.look([x, y, z], [tx, ty, tz], fov)   a fixed camera (null: back)
 import { useEffect } from "react";
 import { useThree } from "@react-three/fiber";
@@ -12,6 +13,7 @@ import { Vector3 } from "three";
 
 import { sound } from "./audio";
 import { cameraOverride } from "./CameraRig";
+import { hands } from "./Hands";
 import type { View } from "./layout";
 import type { DeckId, StyleId } from "./music";
 import {
@@ -36,6 +38,7 @@ const DevDebug = () => {
   useEffect(() => {
     const api = {
       dj,
+      hands,
       camera,
       scene,
       sound,

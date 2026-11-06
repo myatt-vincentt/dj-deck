@@ -1,11 +1,14 @@
 // The page UI, minimal, on Night glass:
 //   - your camera, top right (CameraFrame.tsx): tap it to tuck it away; a
-//     small camera button then sits in the corner to bring it back
+//     small camera button then sits in the corner to bring it back. Over it,
+//     thin guides for the mixer hand and a tag naming what your hands just
+//     did (CameraGuides.tsx)
 //   - one floating dock, bottom centre, icons only: the style (a card of four
 //     beats), play / stop, the effects (a card of the four pads and the
 //     drop), the view (front, player, close), day / night, and how to play.
 //     A small label shows over a button on hover, or for a moment after a tap.
-//   - the how-to-play steps (after Start, or from the dock)
+//   - the how-to-play steps (after Start, or from the dock): for your hands
+//     when the camera runs, for the mouse and keys when it doesn't
 import {
   useEffect,
   useRef,
@@ -26,6 +29,7 @@ import {
   pinToScreen,
   type View,
 } from "./layout";
+import { CameraGuides } from "./CameraGuides";
 import { STYLE, STYLES, type StyleId } from "./music";
 import {
   closeHowTo,
@@ -255,6 +259,71 @@ const PicPlay = () => (
 );
 
 type Step = { key: string; pic: ReactNode; text: ReactNode; tint?: string };
+/** An open palm swishing side to side. */
+const PicSwish = () => (
+  <Pic>
+    <path d="M9 20v-6.5M9 13.5V5.5a1.4 1.4 0 0 1 2.8 0V12M11.8 11V4.5a1.4 1.4 0 0 1 2.8 0V12M14.6 11.5V6a1.4 1.4 0 0 1 2.8 0v8c0 3.5-2 6-5.5 6H11a4 4 0 0 1-3.4-2l-2.3-4a1.3 1.3 0 0 1 2.1-1.5L9 14" />
+    <path d="M2.5 8.5h3M2 11h2.5M19.5 3.5l2 2-2 2" opacity=".6" />
+  </Pic>
+);
+/** A hand moving across and up and down. */
+const PicMixer = () => (
+  <Pic>
+    <path d="M4 12h16M12 4v16" opacity=".6" />
+    <path d="M7 9.5L4 12l3 2.5M17 9.5l3 2.5-3 2.5M9.5 7L12 4l2.5 3M9.5 17l2.5 3 2.5-3" />
+    <circle cx="12" cy="12" r="2.2" />
+  </Pic>
+);
+/** Two palms up, an arrow down: the drop. */
+const PicDrop = () => (
+  <Pic>
+    <path d="M5 9V4M8 9V3M11 9V4M17 9V4M14 9V3M20 9V4" opacity=".6" />
+    <path d="M12 11v10M8.5 17.5L12 21l3.5-3.5" />
+  </Pic>
+);
+
+/** How to play with your hands (shown when the camera runs). */
+const HAND_STEPS: Step[] = [
+  {
+    key: "swish",
+    pic: <PicSwish />,
+    text: "Right hand: swish your open palm side to side to scratch; make a fist to brake",
+    tint: COLOURS.ghost,
+  },
+  {
+    key: "mixer",
+    pic: <PicMixer />,
+    text: "Left hand: across is the crossfader, up and down the filter",
+    tint: COLOURS.ghost,
+  },
+  {
+    key: "signs",
+    pic: <PicPads />,
+    text: "Hold up 1, 2, 3 or 4 fingers for the fill, echo, riser or vocal chop",
+    tint: COLOURS.pads[1],
+  },
+  {
+    key: "drop",
+    pic: <PicDrop />,
+    text: "Raise both palms high, then pull them down fast: the drop",
+    tint: COLOURS.magenta,
+  },
+  {
+    key: "mouse",
+    pic: <PicScratch />,
+    text: (
+      <>
+        Or drag the records, sliders and pads;
+        <span className="vl-keys">
+          <kbd>Space</kbd>
+        </span>
+        plays or stops
+      </>
+    ),
+  },
+];
+
+/** How to play with the mouse and keys (no camera). */
 const STEPS: Step[] = [
   {
     key: "scratch",
@@ -481,6 +550,11 @@ export const Hud = () => {
             <span>{NO_CAMERA}</span>
           </div>
         ) : null}
+        <CameraGuides
+          rect={frame}
+          screen={{ width, height }}
+          shown={dj.started && !hidden && !noCamera}
+        />
         <button
           type="button"
           data-hud="camera"
@@ -529,7 +603,7 @@ export const Hud = () => {
                   <div />
                 </div>
               ) : null}
-              {STEPS.map((st, i) => (
+              {(camera ? HAND_STEPS : STEPS).map((st, i) => (
                 <div className="vl-step" key={st.key}>
                   <span
                     className="vl-pic"

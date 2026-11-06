@@ -24,6 +24,13 @@ import {
 } from "./music";
 
 export type Card = "style" | "fx" | null;
+export type Side = "left" | "right";
+
+/** Which of your hands does what: the deck hand scratches, the mixer hand mixes. */
+export const HAND: { deck: Side; mixer: Side } = {
+  deck: "right",
+  mixer: "left",
+};
 export type PadId = 1 | 2 | 3 | 4;
 export const PADS: PadId[] = [1, 2, 3, 4];
 /** What each pad does. */
